@@ -1,5 +1,3 @@
-var arr : Array<number> = [5, 3, 6, 8, 2, 4, 5]
-
 function insert(x: number, arr: Array<number>) {
     if (arr.length == 0) return [x]
     if (x < arr[0]) return [x].concat(arr)
@@ -11,4 +9,7 @@ function isort(arr: Array<number>) {
     return insert(arr[0], isort(arr.slice(1)))
 }
 
+
+var arr = Array(20).fill(0).map(() => Math.round(Math.random() * 100))
+console.log(arr)
 console.log(isort(arr))
