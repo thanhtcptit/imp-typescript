@@ -100,3 +100,4 @@ log/
 *.tar.gz
 tmp*
 node_modules/*
+**/*.js
