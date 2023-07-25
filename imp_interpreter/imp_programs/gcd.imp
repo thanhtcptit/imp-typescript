@@ -1,0 +1,12 @@
+x := 128;
+y := 72;
+
+while y != 0
+    if y > x
+        tmp := x;
+        x := y;
+        y := tmp
+    else
+        x := x - y
+  end
+end

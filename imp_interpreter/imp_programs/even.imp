@@ -1,0 +1,11 @@
+x := 11;
+
+while x > 0
+  x := x - 2
+end;
+
+if x == 0
+  r := 1
+else
+  r := 0
+end

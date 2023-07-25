@@ -1,0 +1,24 @@
+n := 8;
+c := 1;
+x := -1;
+
+while c <= n
+    i := 0;
+    s1 := 0;
+    while i < c
+        i := i + 1;
+        s1 := s1 + i
+    end;
+
+    s2 := 0;
+    while i <= n
+        s2 := s2 + i;
+        i := i + 1
+    end;
+
+    if s1 == s2
+        x := c
+    end;
+
+    c := c + 1
+end
