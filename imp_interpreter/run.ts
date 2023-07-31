@@ -435,7 +435,6 @@ class Alternate extends Parser {
     }
 }
 
-
 class Optional extends Parser {
     parser: Parser
 
@@ -494,9 +493,7 @@ const var_parser: Parser = new Tag(VARIABLE_TAG)
 
 const extract_group = (x: Array<Array<string | number>>) => {return x[0][1]}
 
-
-
-function build_operator_parser(ops: Array<string>) {
+function buildOperatorParser(ops: Array<string>) {
     let ops_parser: Parser;
     for (let i = 0; i < ops.length; i++) {
         if (i == 0)
@@ -507,53 +504,53 @@ function build_operator_parser(ops: Array<string>) {
     return ops_parser
 }
 
-function build_arithmetic_term_parser() {
+function buildArithmeticTermParser() {
     let number_exp_parser: Parser = number_parser.process(
         (x: number) => {return new ValueExpression(x)})
     let var_exp_parser: Parser = var_parser.process(
         (x: string) => {return new VariableExpression(x)})
     let group_exp_parser: Parser = new Syntax("(").combine(
-        new Lazy(build_arithmetic_expression_parser)).combine(
+        new Lazy(buildArithmeticExpressionParser)).combine(
         new Syntax(")")).process(extract_group)
     
     return number_exp_parser.alternate(var_exp_parser).alternate(group_exp_parser)
 }
 
-function build_arithmetic_expression_parser() {
-    return build_arithmetic_term_parser().repeat(
-        build_operator_parser(arithmetic_operators).process(
+function buildArithmeticExpressionParser() {
+    return buildArithmeticTermParser().repeat(
+        buildOperatorParser(arithmetic_operators).process(
             (op: string) => {
                 return (x: Expression, y: Expression) => {
                     return new MathExpression(op, x, y)
             }}))
 }
 
-function build_logic_term_parser() {
+function buildLogicTermParser() {
     let boolean_exp_parser: Parser = boolean_parser.process(
         (x: boolean) => {return new ValueExpression(x)})
     let var_exp_parser: Parser = boolean_var_parser.process(
         (x: string) => {return new VariableExpression(x)})
     let negative_exp_parser: Parser = new Syntax("!").combine(
-        new Lazy(build_logic_expression_parser)).process(
+        new Lazy(buildLogicExpressionParser)).process(
             (parsed) => {
                 return new NotExpression(parsed[1])
             })
-    let arith_comp_exp_parser: Parser = build_arithmetic_expression_parser().combine(
-        build_operator_parser(comparison_operators)).combine(
-            build_arithmetic_expression_parser()).process(
+    let arith_comp_exp_parser: Parser = buildArithmeticExpressionParser().combine(
+        buildOperatorParser(comparison_operators)).combine(
+            buildArithmeticExpressionParser()).process(
                 (parsed) => {
                     return new ComparisonExpression(parsed[0][1], parsed[0][0], parsed[1])
                 })
     let group_exp_parser: Parser = new Syntax("(").combine(
-        new Lazy(build_logic_expression_parser)).combine(
+        new Lazy(buildLogicExpressionParser)).combine(
         new Syntax(")")).process(extract_group)
     return boolean_exp_parser.alternate(arith_comp_exp_parser).alternate(
         negative_exp_parser).alternate(var_exp_parser).alternate(group_exp_parser)
 }
 
-function build_logic_expression_parser() {
-    return build_logic_term_parser().repeat(
-        build_operator_parser(logic_operators).process(
+function buildLogicExpressionParser() {
+    return buildLogicTermParser().repeat(
+        buildOperatorParser(logic_operators).process(
             (op: string) => {
                 return (x: Expression, y: Expression) => {
                     if (op == "&&")
@@ -563,21 +560,21 @@ function build_logic_expression_parser() {
                 }}))
 }
 
-function build_assign_statement_parser() {
+function buildAssignStatementParser() {
     return var_parser.combine(
         new Syntax(":=")).combine(
-            build_logic_expression_parser().alternate(
-                build_arithmetic_expression_parser())).process(
+            buildLogicExpressionParser().alternate(
+                buildArithmeticExpressionParser())).process(
                     (parsed) => {
                         return new AssignStatement(parsed[0][0], parsed[1])
                     })
 }
 
-function build_if_statement_parser() {
+function buildIfStatementParser() {
     return new Syntax("if").combine(
-        build_logic_expression_parser()).combine(
-            new Lazy(build_block_parser)).combine(
-                new Optional(new Syntax("else").combine(new Lazy(build_block_parser)))).combine(
+        buildLogicExpressionParser()).combine(
+            new Lazy(buildBlockParser)).combine(
+                new Optional(new Syntax("else").combine(new Lazy(buildBlockParser)))).combine(
                     new Syntax("end")).process(
                         (parsed) => {
                             let condition_stm: Statement = parsed[0][0][0][1]
@@ -590,10 +587,10 @@ function build_if_statement_parser() {
                         })
 }
 
-function build_while_statement_parser() {
+function buildWhileStatementParser() {
     return new Syntax("while").combine(
-        build_logic_expression_parser()).combine(
-            new Lazy(build_block_parser)).combine(
+        buildLogicExpressionParser()).combine(
+            new Lazy(buildBlockParser)).combine(
                 new Syntax("end")).process(
                     (parsed) => {
                         let condition_stm: Statement = parsed[0][0][1]
@@ -602,7 +599,7 @@ function build_while_statement_parser() {
                     })
 }
 
-function build_block_parser() {
+function buildBlockParser() {
     let semicolon_parser = new Syntax(";").process(
         (x: any) => {
             return (l: Statement, r: Statement) => {
@@ -610,16 +607,16 @@ function build_block_parser() {
             }})
 
     return new Repeat(
-        build_assign_statement_parser().alternate(
-            build_if_statement_parser().alternate(
-                build_while_statement_parser()
+        buildAssignStatementParser().alternate(
+            buildIfStatementParser().alternate(
+                buildWhileStatementParser()
             )), semicolon_parser)
 }
 
-function intepret_imp_program(file: string) {
+function intepret(file: string) {
     let tokens: Array<Array<string>> = parseFile(file)
 
-    let parsed_program: Result = new Program(build_block_parser()).parse(tokens, 0)
+    let parsed_program: Result = new Program(buildBlockParser()).parse(tokens, 0)
     if (parsed_program == null) {
         console.log("Intepreting error with parsed tokens: ")
         console.log(tokens)
@@ -637,4 +634,4 @@ function intepret_imp_program(file: string) {
 var args = process.argv
 
 var file: string = args[2]
-intepret_imp_program(file)
+intepret(file)
