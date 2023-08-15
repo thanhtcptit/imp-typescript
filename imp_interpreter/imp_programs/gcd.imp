@@ -1,12 +1,16 @@
-x := 128;
-y := 72;
+func main() {
+    x := 128;
+    y := 72;
 
-while y != 0
-    if y > x
-        tmp := x;
-        x := y;
-        y := tmp
-    else
-        x := x - y
-  end
-end
+    while y != 0
+        if y > x
+            tmp := x;
+            x := y;
+            y := tmp
+        else
+            x := x - y
+        end
+    end;
+    
+    return 0
+}

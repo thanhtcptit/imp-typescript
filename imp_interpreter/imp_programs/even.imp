@@ -1,11 +1,20 @@
-x := 11;
+func check(x) {
+    while x > 0
+        x := x - 2
+    end;
 
-while x > 0
-  x := x - 2
-end;
+    if x == 0
+        r := 1
+    else
+        r := 0
+    end;
 
-if x == 0
-  r := 1
-else
-  r := 0
-end
+    return r
+};
+
+func main() {
+    x := 11;
+    r := check(x);
+
+    return 0
+}

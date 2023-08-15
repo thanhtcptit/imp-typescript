@@ -11,7 +11,10 @@ const token_regex = [
     ["^\:=", SYNTAX_TAG],
     ["^\\(", SYNTAX_TAG],
     ["^\\)", SYNTAX_TAG],
+    ["^{", SYNTAX_TAG],
+    ["^}", SYNTAX_TAG],
     ["^;", SYNTAX_TAG],
+    ["^,", SYNTAX_TAG],
     ["^>=", SYNTAX_TAG],
     ["^>", SYNTAX_TAG],
     ["^<=", SYNTAX_TAG],
@@ -21,6 +24,8 @@ const token_regex = [
     ["^&&", SYNTAX_TAG],
     ["^\\|\\|", SYNTAX_TAG],
     ["^!", SYNTAX_TAG],
+    ["^func", SYNTAX_TAG],
+    ["^return", SYNTAX_TAG],
     ["^if", SYNTAX_TAG],
     ["^else", SYNTAX_TAG],
     ["^end", SYNTAX_TAG],
@@ -66,14 +71,26 @@ function parseFile(filePath: string) {
     return tokens
 }
 
+function unroll(tuples: any) {
+    if (tuples == null)
+        return []
+    let unrolled_array: Array<any> = new Array<any>()
+    while (tuples instanceof Array) {
+        unrolled_array.push(tuples[1])
+        tuples = tuples[0]
+    }
+    unrolled_array.push(tuples)
+    return unrolled_array.reverse()
+}
+
 type imp_type = number | boolean
 
 abstract class Statement {
-    public abstract eval(env: Map<string, imp_type>);
+    public abstract eval(intepreter: Intepreter);
 }
 
 abstract class Expression {
-    public abstract eval(env: Map<string, imp_type>);
+    public abstract eval(intepreter: Intepreter);
 }
 
 class ValueExpression extends Expression {
@@ -84,7 +101,7 @@ class ValueExpression extends Expression {
         this.val = val
     }
 
-    public eval(env: Map<string, imp_type>) {
+    public eval(intepreter: Intepreter) {
         return this.val
     }
 }
@@ -97,9 +114,9 @@ class VariableExpression extends Expression {
         this.var_name = var_name
     }
 
-    public eval(env: Map<string, imp_type>) {
-        if (env.get(this.var_name) != undefined)
-            return env.get(this.var_name)
+    public eval(intepreter: Intepreter) {
+        if (intepreter.getValue(this.var_name) != undefined)
+            return intepreter.getValue(this.var_name)
         return 0
     }
 }
@@ -116,9 +133,9 @@ class MathExpression extends Expression {
         this.right_exp = right_exp
     }
 
-    public eval(env: Map<string, imp_type>) {
-        let left_val = this.left_exp.eval(env)
-        let right_val = this.right_exp.eval(env)
+    public eval(intepreter: Intepreter) {
+        let left_val = this.left_exp.eval(intepreter)
+        let right_val = this.right_exp.eval(intepreter)
         if (this.op == "+")
             return left_val + right_val
         else
@@ -138,9 +155,9 @@ class ComparisonExpression extends Expression {
         this.right_exp = right_exp
     }
 
-    public eval(env: Map<string, imp_type>) {
-        let left_val = this.left_exp.eval(env)
-        let right_val = this.right_exp.eval(env)
+    public eval(intepreter: Intepreter) {
+        let left_val = this.left_exp.eval(intepreter)
+        let right_val = this.right_exp.eval(intepreter)
         if (this.op == "<")
             return left_val < right_val
         else if (this.op == "<=")
@@ -166,9 +183,9 @@ class AndExpression extends Expression {
         this.right_exp = right_exp
     }
 
-    public eval(env: Map<string, imp_type>) {
-        let left_val = this.left_exp.eval(env)
-        let right_val = this.right_exp.eval(env)
+    public eval(intepreter: Intepreter) {
+        let left_val = this.left_exp.eval(intepreter)
+        let right_val = this.right_exp.eval(intepreter)
         return left_val && right_val
     }
 }
@@ -183,9 +200,9 @@ class OrExpression extends Expression {
         this.right_exp = right_exp
     }
 
-    public eval(env: Map<string, imp_type>) {
-        let left_val = this.left_exp.eval(env)
-        let right_val = this.right_exp.eval(env)
+    public eval(intepreter: Intepreter) {
+        let left_val = this.left_exp.eval(intepreter)
+        let right_val = this.right_exp.eval(intepreter)
         return left_val || right_val
     }
 }
@@ -198,13 +215,71 @@ class NotExpression extends Expression {
         this.exp = exp
     }
 
-    public eval(env: Map<string, imp_type>) {
-        let val = this.exp.eval(env)
+    public eval(intepreter: Intepreter) {
+        let val = this.exp.eval(intepreter)
         return !val
     }
 }
 
-class AssignStatement extends Statement{
+class FunctionDefExpression extends Expression {
+    name: string
+    args_name: Array<string> | null
+    body: Statement | null
+    return_exp: Expression
+
+    constructor(name: string, args_name: Array<string> | null, body: Statement | null,
+                return_exp: Expression) {
+        super()
+        this.name = name
+        this.args_name = args_name
+        this.body = body
+        this.return_exp = return_exp
+    }
+
+    public eval(intepreter: Intepreter) {
+        if (this.body != null)
+            this.body.eval(intepreter)
+
+        if (this.name == "main") {
+            intepreter.call_stack.getCurrentFrame().memory.forEach(
+                (value: imp_type, key: string) => {
+                    console.log(key + ": " + value)
+            })
+        }
+
+        let return_val: imp_type = this.return_exp.eval(intepreter)
+        return return_val
+    }
+}
+
+class FunctionCallExpression extends Expression {
+    name: string
+    args: Array<Expression>
+
+    constructor(name: string, args: Array<Expression>) {
+        super()
+        this.name = name
+        this.args = args
+    }
+
+    public eval(intepreter: Intepreter) {
+        let args_value: Array<imp_type> = new Array<imp_type>()
+        this.args.forEach(exp => {
+            args_value.push(exp.eval(intepreter))
+        })
+        intepreter.createFrame()
+        let func_def = intepreter.getFunctionDef(this.name)
+        for (let i = 0; i < args_value.length; i++) {
+            intepreter.setValue(func_def.args_name[i], args_value[i])
+        }
+        let return_val: imp_type = func_def.eval(intepreter)
+
+        intepreter.popFrame()
+        return return_val
+    }
+}
+
+class AssignStatement extends Statement {
     var_name: string
     exp: Expression
 
@@ -214,8 +289,8 @@ class AssignStatement extends Statement{
         this.exp = exp
     }
 
-    public eval(env: Map<string, imp_type>) {
-        env.set(this.var_name, this.exp.eval(env))
+    public eval(intepreter: Intepreter) {
+        intepreter.setValue(this.var_name, this.exp.eval(intepreter))
     }
 }
 
@@ -229,9 +304,9 @@ class SequentialStatement extends Statement {
         this.second_stm = second_stm
     }
 
-    public eval(env: Map<string, imp_type>) {
-        this.first_stm.eval(env)
-        this.second_stm.eval(env)
+    public eval(intepreter: Intepreter) {
+        this.first_stm.eval(intepreter)
+        this.second_stm.eval(intepreter)
     }
 }
 
@@ -247,11 +322,11 @@ class IfStatement extends Statement {
         this.false_stm = false_stm
     }
 
-    public eval(env: Map<string, imp_type>) {
-        if (this.condition_stm.eval(env))
-            this.true_stm.eval(env)
+    public eval(intepreter: Intepreter) {
+        if (this.condition_stm.eval(intepreter))
+            this.true_stm.eval(intepreter)
         else if (this.false_stm != null)
-            this.false_stm.eval(env)
+            this.false_stm.eval(intepreter)
     }
 }
 
@@ -265,9 +340,9 @@ class WhileStatement extends Statement {
         this.body_stm = body_stm
     }
 
-    public eval(env: Map<string, imp_type>) {
-        while (this.condition_stm.eval(env)) {
-            this.body_stm.eval(env)
+    public eval(intepreter: Intepreter) {
+        while (this.condition_stm.eval(intepreter)) {
+            this.body_stm.eval(intepreter)
         }
     }
 }
@@ -313,24 +388,6 @@ class Tag extends Parser {
     public parse(tokens: Array<Array<string>>, pos: number) {
         if (pos < tokens.length && tokens[pos][1] == this.tag) 
             return new Result(tokens[pos][0], pos + 1)
-        return null
-    }
-}
-
-class BooleanVariable extends Parser {
-    tag: string = VARIABLE_TAG
-
-    constructor() {
-        super()
-    }
-
-    public parse(tokens: Array<Array<string>>, pos: number) {
-        if (pos < tokens.length && tokens[pos][1] == this.tag) {
-            if (pos + 1 < tokens.length && arithmetic_operators.indexOf(
-                    tokens[pos + 1][0]) > -1)
-                return null
-            return new Result(tokens[pos][0], pos + 1)
-        }
         return null
     }
 }
@@ -427,11 +484,13 @@ class Alternate extends Parser {
     }
 
     public parse(tokens: Array<Array<string>>, pos: number) {
-        let res = this.left_parser.parse(tokens, pos)
-        if (res != null)
-            return res
-        else
-            return this.right_parser.parse(tokens, pos)
+        let left_res = this.left_parser.parse(tokens, pos)
+        let right_res = this.right_parser.parse(tokens, pos)
+        if (right_res == null)
+            return left_res
+        else if (left_res != null && left_res.pos > right_res.pos)
+            return left_res
+        return right_res
     }
 }
 
@@ -488,12 +547,11 @@ const number_parser: Parser = new Tag(NUMBER_TAG).process(
     (x: string) => {return +x})
 const boolean_parser: Parser = new Tag(BOOLEAN_TAG).process(
     (x: string) => {return x == "true"})
-const boolean_var_parser: Parser = new BooleanVariable()
 const var_parser: Parser = new Tag(VARIABLE_TAG)
 
 const extract_group = (x: Array<Array<string | number>>) => {return x[0][1]}
 
-function buildOperatorParser(ops: Array<string>) {
+function getOperatorParser(ops: Array<string>) {
     let ops_parser: Parser;
     for (let i = 0; i < ops.length; i++) {
         if (i == 0)
@@ -504,53 +562,53 @@ function buildOperatorParser(ops: Array<string>) {
     return ops_parser
 }
 
-function buildArithmeticTermParser() {
+function getArithmeticTermParser() {
     let number_exp_parser: Parser = number_parser.process(
         (x: number) => {return new ValueExpression(x)})
     let var_exp_parser: Parser = var_parser.process(
         (x: string) => {return new VariableExpression(x)})
     let group_exp_parser: Parser = new Syntax("(").combine(
-        new Lazy(buildArithmeticExpressionParser)).combine(
+        new Lazy(getArithmeticExpressionParser)).combine(
         new Syntax(")")).process(extract_group)
     
     return number_exp_parser.alternate(var_exp_parser).alternate(group_exp_parser)
 }
 
-function buildArithmeticExpressionParser() {
-    return buildArithmeticTermParser().repeat(
-        buildOperatorParser(arithmetic_operators).process(
+function getArithmeticExpressionParser() {
+    return getFunctionCallParser().alternate(getArithmeticTermParser()).repeat(
+        getOperatorParser(arithmetic_operators).process(
             (op: string) => {
                 return (x: Expression, y: Expression) => {
                     return new MathExpression(op, x, y)
             }}))
 }
 
-function buildLogicTermParser() {
+function getLogicTermParser() {
     let boolean_exp_parser: Parser = boolean_parser.process(
         (x: boolean) => {return new ValueExpression(x)})
-    let var_exp_parser: Parser = boolean_var_parser.process(
+    let var_exp_parser: Parser = var_parser.process(
         (x: string) => {return new VariableExpression(x)})
     let negative_exp_parser: Parser = new Syntax("!").combine(
-        new Lazy(buildLogicExpressionParser)).process(
+        new Lazy(getLogicExpressionParser)).process(
             (parsed) => {
                 return new NotExpression(parsed[1])
             })
-    let arith_comp_exp_parser: Parser = buildArithmeticExpressionParser().combine(
-        buildOperatorParser(comparison_operators)).combine(
-            buildArithmeticExpressionParser()).process(
+    let arith_comp_exp_parser: Parser = getArithmeticExpressionParser().combine(
+        getOperatorParser(comparison_operators)).combine(
+            getArithmeticExpressionParser()).process(
                 (parsed) => {
                     return new ComparisonExpression(parsed[0][1], parsed[0][0], parsed[1])
                 })
     let group_exp_parser: Parser = new Syntax("(").combine(
-        new Lazy(buildLogicExpressionParser)).combine(
+        new Lazy(getLogicExpressionParser)).combine(
         new Syntax(")")).process(extract_group)
     return boolean_exp_parser.alternate(arith_comp_exp_parser).alternate(
         negative_exp_parser).alternate(var_exp_parser).alternate(group_exp_parser)
 }
 
-function buildLogicExpressionParser() {
-    return buildLogicTermParser().repeat(
-        buildOperatorParser(logic_operators).process(
+function getLogicExpressionParser() {
+    return getFunctionCallParser().alternate(getLogicTermParser()).repeat(
+        getOperatorParser(logic_operators).process(
             (op: string) => {
                 return (x: Expression, y: Expression) => {
                     if (op == "&&")
@@ -560,75 +618,194 @@ function buildLogicExpressionParser() {
                 }}))
 }
 
-function buildAssignStatementParser() {
+function getFunctionCallParser() {
+    let colon_parser: Parser = new Syntax(",").process(
+        (x: any) => {
+            return (l: Expression, r: Expression) => {
+                return [l, r]
+            }})
+
+    return var_parser.combine(
+        new Syntax("(")).combine(
+        new Repeat(new Lazy(getLogicExpressionParser).alternate(
+            new Lazy(getArithmeticExpressionParser)), colon_parser)).combine(
+        new Syntax(")")).process(
+            (parsed) => {
+                let func_name: string = parsed[0][0][0]
+                let args: Array<Expression> = unroll(parsed[0][1])
+                return new FunctionCallExpression(func_name, args)
+            }
+        )
+}
+
+function getAssignStatementParser() {
     return var_parser.combine(
         new Syntax(":=")).combine(
-            buildLogicExpressionParser().alternate(
-                buildArithmeticExpressionParser())).process(
-                    (parsed) => {
-                        return new AssignStatement(parsed[0][0], parsed[1])
-                    })
+            getLogicExpressionParser().alternate(
+            getArithmeticExpressionParser())).process(
+                (parsed) => {
+                    return new AssignStatement(parsed[0][0], parsed[1])
+                })
 }
 
-function buildIfStatementParser() {
+function getIfStatementParser() {
     return new Syntax("if").combine(
-        buildLogicExpressionParser()).combine(
-            new Lazy(buildBlockParser)).combine(
-                new Optional(new Syntax("else").combine(new Lazy(buildBlockParser)))).combine(
-                    new Syntax("end")).process(
-                        (parsed) => {
-                            let condition_stm: Statement = parsed[0][0][0][1]
-                            let true_stm: Statement = parsed[0][0][1]
-                            let false_parsed = parsed[0][1]
-                            let false_stm = null
-                            if (false_parsed != null)
-                                false_stm = false_parsed[1]
-                            return new IfStatement(condition_stm, true_stm, false_stm)
-                        })
+        getFunctionCallParser().alternate(getLogicExpressionParser())).combine(
+        new Lazy(getBlockParser)).combine(
+        new Optional(new Syntax("else").combine(new Lazy(getBlockParser)))).combine(
+        new Syntax("end")).process(
+            (parsed) => {
+                let condition_stm: Statement = parsed[0][0][0][1]
+                let true_stm: Statement = parsed[0][0][1]
+                let false_parsed = parsed[0][1]
+                let false_stm = null
+                if (false_parsed != null)
+                    false_stm = false_parsed[1]
+                return new IfStatement(condition_stm, true_stm, false_stm)
+            })
 }
 
-function buildWhileStatementParser() {
+function getWhileStatementParser() {
     return new Syntax("while").combine(
-        buildLogicExpressionParser()).combine(
-            new Lazy(buildBlockParser)).combine(
-                new Syntax("end")).process(
-                    (parsed) => {
-                        let condition_stm: Statement = parsed[0][0][1]
-                        let body_stm: Statement = parsed[0][1]
-                        return new WhileStatement(condition_stm, body_stm)
-                    })
+        getFunctionCallParser().alternate(getLogicExpressionParser())).combine(
+        new Lazy(getBlockParser)).combine(
+        new Syntax("end")).process(
+            (parsed) => {
+                let condition_stm: Statement = parsed[0][0][1]
+                let body_stm: Statement = parsed[0][1]
+                return new WhileStatement(condition_stm, body_stm)
+            })
 }
 
-function buildBlockParser() {
-    let semicolon_parser = new Syntax(";").process(
+function getFunctionDefParser() {
+    let colon_parser: Parser = new Syntax(",").process(
+        (x: any) => {
+            return (l: string, r: string) => {
+                return [l, r]
+            }})
+
+    return new Syntax("func").combine(
+        var_parser).combine(
+        new Syntax("(")).combine(
+        new Optional(new Repeat(var_parser, colon_parser))).combine(
+        new Syntax(")")).combine(
+        new Syntax("{")).combine(
+        new Optional(getBlockParser())).combine(
+        new Optional(new Syntax(";"))).combine(
+        new Syntax("return")).combine(
+        getLogicExpressionParser().alternate(
+            getArithmeticExpressionParser())).combine(
+        new Syntax("}")).process(
+            (parsed) => {
+                let func_name: string = parsed[0][0][0][0][0][0][0][0][0][1]
+                let args: Array<string> | null = unroll(parsed[0][0][0][0][0][0][0][1])
+                let body_stm: Statement | null = parsed[0][0][0][0][1]
+                let return_exp: Expression = parsed[0][1]
+                return new FunctionDefExpression(func_name, args, body_stm, return_exp)
+            }
+        )
+}
+
+function getBlockParser() {
+    let semicolon_parser: Parser = new Syntax(";").process(
         (x: any) => {
             return (l: Statement, r: Statement) => {
                 return new SequentialStatement(l, r)
             }})
 
     return new Repeat(
-        buildAssignStatementParser().alternate(
-            buildIfStatementParser().alternate(
-                buildWhileStatementParser()
-            )), semicolon_parser)
+        getAssignStatementParser().alternate(
+        getIfStatementParser().alternate(
+        getWhileStatementParser())), semicolon_parser)
+}
+
+function getProgramParser() {
+    let semicolon_parser: Parser = new Syntax(";").process(
+        (x: any) => {
+            return (l: FunctionDefExpression, r: FunctionDefExpression) => {
+                return [l, r]
+            }})
+    return new Repeat(getFunctionDefParser(), semicolon_parser)
+}
+
+class Frame {
+    memory: Map<string, imp_type>
+
+    constructor() {
+        this.memory = new Map<string, imp_type>()
+    }
+}
+
+class CallStack {
+    stack: Array<Frame>
+
+    constructor() {
+        this.stack = new Array<Frame>()
+    }
+
+    public createFrame() {
+        this.stack.push(new Frame())
+    }
+
+    public pop() {
+        this.stack.pop()
+    }
+
+    public getCurrentFrame() {
+        return this.stack[this.stack.length - 1]
+    }
+}
+
+class Intepreter {
+    call_stack: CallStack
+    functions: Map<string, FunctionDefExpression>
+
+    constructor() {
+        this.call_stack = new CallStack()
+        this.functions = new Map<string, FunctionDefExpression>()
+    }
+
+    public setValue(var_name: string, value: imp_type) {
+        this.call_stack.getCurrentFrame().memory.set(var_name, value)
+    }
+
+    public getValue(var_name: string) {
+        return this.call_stack.getCurrentFrame().memory.get(var_name)
+    }
+
+    public createFrame() {
+        this.call_stack.createFrame()
+    }
+
+    public popFrame() {
+        this.call_stack.pop()
+    }
+
+    public getFunctionDef(func_name: string) {
+        return this.functions.get(func_name)
+    }
+
+    public intepret(file: string) {
+        let tokens: Array<Array<string>> = parseFile(file)
+        let parsed_program: Result = new Program(getProgramParser()).parse(tokens, 0)
+        if (parsed_program == null) {
+            console.log("Intepreting error with parsed tokens: ")
+            console.log(tokens)
+            return -1
+        }
+
+        let function_list = unroll(parsed_program.value)
+        for (let i = 0; i < function_list.length; i++)
+            this.functions.set(function_list[i].name, function_list[i])
+
+        let main_func = new FunctionCallExpression("main", [])
+        main_func.eval(this)
+    }
 }
 
 function intepret(file: string) {
-    let tokens: Array<Array<string>> = parseFile(file)
-
-    let parsed_program: Result = new Program(buildBlockParser()).parse(tokens, 0)
-    if (parsed_program == null) {
-        console.log("Intepreting error with parsed tokens: ")
-        console.log(tokens)
-    }
-    else {
-        let env: Map<string, imp_type> = new Map<string, imp_type>()
-        let program = parsed_program.value
-        program.eval(env)
-        env.forEach((value: imp_type, key: string) => {
-            console.log(key + ": " + value)
-        })
-    }
+    let intepreter: Intepreter = new Intepreter()
+    intepreter.intepret(file)
 }
 
 var args = process.argv

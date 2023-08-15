@@ -1,7 +1,15 @@
-n := 10;
-sum := 0;
+func add(x, y) {
+    return x + y
+};
 
-while n > 0
-    sum := sum + n;
-    n := n - 1
-end
+func main() {
+    n := 10;
+    sum := 0;
+
+    while n > 0
+        sum := add(sum, n);
+        n := n - 1
+    end;
+
+    return 0
+}

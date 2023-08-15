@@ -1,0 +1,16 @@
+func fib(n) {
+    if n <= 1
+        r := n
+    else
+        r := fib(n - 1) + fib(n - 2)
+    end;
+    
+    return r
+};
+
+func main() {
+    n := 9;
+    n := fib(n);
+
+    return 0
+}
