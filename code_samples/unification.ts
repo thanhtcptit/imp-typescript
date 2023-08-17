@@ -1,3 +1,10 @@
+import { AssertionError } from "assert"
+
+function assert(condition, message) {
+    if (condition == false)
+        throw new AssertionError({"message": message})
+}
+
 function zip(l1: Array<any>, l2: Array<any>) {
     let min_length: number = Math.min(l1.length, l2.length)
     let r: Array<[any, any]> = new Array<[any, any]>()
@@ -6,7 +13,6 @@ function zip(l1: Array<any>, l2: Array<any>) {
     }
     return r
 }
-
 
 abstract class Term {
     name: string
@@ -120,24 +126,47 @@ function unification(term_pairs: Array<[Term, Term]>, sub: Substitution) {
 
     let pair: [Term, Term] = term_pairs[0]
     if (pair[0] instanceof Fun) {
-        if (pair[1] instanceof Fun && pair[0].name == pair[1].name) {
+        if (pair[1] instanceof Fun) {
+            assert(pair[0].name == pair[1].name,
+                "Failed: Function symbols can't be unified: " + pair[0].repr() + " & " + pair[1].repr())
+
             term_pairs = zip(pair[0].params, pair[1].params).concat(term_pairs.slice(1))
             return unification(term_pairs, sub)
+        } else if (pair[1] instanceof Var) {
+            let v: Term | undefined = sub.get(pair[1])
+            if (v != undefined) {
+                assert(v.equals(pair[0]),
+                    "Failed: " + pair[1].repr() + " has multiple substitutions: " + pair[0].repr() + ", " + v.repr())
+
+                return unification(term_pairs.slice(1), sub)
+            }
+
+            assert(!pair[0].contains(pair[1]),
+                "Failed: " + pair[0].repr() + " contains " + pair[1].repr() + " as variable")
+
+            for (let i = 1; i < term_pairs.length; i++) {
+                term_pairs[i] = [term_pairs[i][0].replace(pair[1], pair[0]),
+                                 term_pairs[i][1].replace(pair[1], pair[0])]
+            }
+            sub.set(pair[1], pair[0])
+            return unification(term_pairs.slice(1), sub)
         } else
             return undefined
     }
-    if (pair[0] instanceof Var) {
+    else if (pair[0] instanceof Var) {
         let v: Term | undefined = sub.get(pair[0])
         if (v != undefined) {
-            if (v.equals(pair[1]))
-                return unification(term_pairs.slice(1), sub)
-            return undefined
+            assert(v.equals(pair[1]),
+                "Failed: " + pair[0].repr() + " has multiple substitutions: " + pair[1].repr() + ", " + v.repr())
+
+            return unification(term_pairs.slice(1), sub)
         } else {
+            if (pair[1] instanceof Fun)
+                assert(!pair[1].contains(pair[0]),
+                    "Failed: " + pair[1].repr() + " contains " + pair[0].repr() + " as variable")
+
             if (pair[0].equals(pair[1]))
                 return unification(term_pairs.slice(1), sub)
-
-            if (pair[1] instanceof Fun && pair[1].contains(pair[0]))
-                return undefined
 
             for (let i = 1; i < term_pairs.length; i++) {
                 term_pairs[i] = [term_pairs[i][0].replace(pair[0], pair[1]),
@@ -151,17 +180,19 @@ function unification(term_pairs: Array<[Term, Term]>, sub: Substitution) {
 }
 
 function unify(t1: Term, t2: Term) {
+    console.log("\nUnification: " + t1.repr() + " & " + t2.repr())
+
     let sub: Substitution = new Map<Var, Term>()
     let res: Substitution | undefined = unification([[t1.copy(), t2.copy()]], sub)
     if (res == undefined)
-        console.log("Unification failed for " + t1.repr() + " & " + t2.repr())
+        console.log("- Failed")
     else {
         merge(sub)
         let sub_str: string = ""
         sub.forEach((v: Term, k: Var) => {
             sub_str += k.repr() + " -> " + v.repr() + ", "
         })
-        console.log("Unification for " + t1.repr() + " & " + t2.repr() + ": { " + sub_str + "}")
+        console.log("{ " + sub_str + "}")
     }
 }
 
@@ -170,9 +201,13 @@ let t2: Term = new Fun("add", [new Fun("0", []), new Fun("s", [new Var("x")])]) 
 let t3: Term = new Fun("add", [new Var("x"), new Fun("s", [new Var("y")])]) // add(x + s(y))
 let t4: Term = new Fun("add", [new Fun("s", [new Var("y")]), new Fun("s", [new Var("z")])]) // add(s(y) + s(z))
 let t5: Term = new Fun("add", [new Var("z"), new Fun("s", [new Fun("s", [new Var("t")])])]) // add(z + s(s(t)))
+let t6: Term = new Fun("add", [new Var("t"), new Fun("s", [new Fun("s", [new Var("z")])])]) // add(t + s(s(z)))
 
-unify(t1, t2)
-unify(t1, t3)
-unify(t3, t4)
-unify(t3, t5)
-unify(t4, t5)
+let test_cases: Array<[Term, Term]> = [[t1, t2], [t1, t3], [t3, t4], [t3, t5], [t4, t5], [t5, t6]]
+for (let test of test_cases) {
+    try {
+        unify(test[0], test[1])
+    } catch(e) {
+        console.log("- " + e.message)
+    }
+}
