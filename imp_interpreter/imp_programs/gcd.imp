@@ -1,7 +1,4 @@
-func main() {
-    x := 128;
-    y := 72;
-
+func gcd(x, y) {
     while y != 0
         if y > x
             tmp := x;
@@ -11,6 +8,10 @@ func main() {
             x := x - y
         end
     end;
-    
+    return x
+};
+
+func main() {
+    r := gcd(128, 72);
     return 0
 }

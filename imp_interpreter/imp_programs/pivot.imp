@@ -23,6 +23,5 @@ func main() {
 
         c := c + 1
     end;
-
     return 0
 }

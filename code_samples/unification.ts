@@ -17,16 +17,14 @@ function zip(l1: Array<any>, l2: Array<any>) {
 abstract class Term {
     name: string
 
-    abstract repr();
-    abstract equals(other: Term);
-    abstract contains(v: Var);
-    abstract replace(v: Var, term: Term);
-    abstract copy();
+    abstract repr()
+    abstract equals(other: Term)
+    abstract contains(v: Var)
+    abstract replace(v: Var, term: Term)
+    abstract copy()
 }
 
 class Var extends Term {
-    name: string
-
     constructor(name: string) {
         super()
         this.name = name
@@ -56,7 +54,6 @@ class Var extends Term {
 }
 
 class Fun extends Term {
-    name: string
     params: Array<Term>
 
     constructor(name: string, params: Array<Term>) {
@@ -106,7 +103,7 @@ class Fun extends Term {
 
 type Substitution = Map<Var, Term>
 
-function merge(sub: Substitution) {
+function merge_substitution(sub: Substitution) {
     let sub_vars: Array<Var> = Array.from(sub.keys())
     for (let v of sub_vars) {
         for (let v1 of sub_vars) {
@@ -119,16 +116,23 @@ function merge(sub: Substitution) {
     }
 }
 
+function substitute(term: Term, sub: Substitution) {
+    for (let e of Array.from(sub.entries()))
+        term = term.replace(e[0], e[1])
+    return term
+}
+
 function unification(term_pairs: Array<[Term, Term]>, sub: Substitution) {
     // console.log(term_pairs)
     // console.log(sub)
-    if (term_pairs.length == 0) return sub
+    if (term_pairs.length == 0) return true
 
     let pair: [Term, Term] = term_pairs[0]
     if (pair[0] instanceof Fun) {
         if (pair[1] instanceof Fun) {
             assert(pair[0].name == pair[1].name,
-                "Failed: Function symbols can't be unified: " + pair[0].repr() + " & " + pair[1].repr())
+                "Failed: Function symbols can't be unified: "
+                + pair[0].repr() + " & " + pair[1].repr())
 
             term_pairs = zip(pair[0].params, pair[1].params).concat(term_pairs.slice(1))
             return unification(term_pairs, sub)
@@ -136,13 +140,15 @@ function unification(term_pairs: Array<[Term, Term]>, sub: Substitution) {
             let v: Term | undefined = sub.get(pair[1])
             if (v != undefined) {
                 assert(v.equals(pair[0]),
-                    "Failed: " + pair[1].repr() + " has multiple substitutions: " + pair[0].repr() + ", " + v.repr())
+                    "Failed: " + pair[1].repr() + " has multiple substitutions: "
+                    + pair[0].repr() + ", " + v.repr())
 
                 return unification(term_pairs.slice(1), sub)
             }
 
             assert(!pair[0].contains(pair[1]),
-                "Failed: " + pair[0].repr() + " contains " + pair[1].repr() + " as variable")
+                "Failed: " + pair[0].repr() + " contains "
+                + pair[1].repr() + " as variable")
 
             for (let i = 1; i < term_pairs.length; i++) {
                 term_pairs[i] = [term_pairs[i][0].replace(pair[1], pair[0]),
@@ -151,13 +157,14 @@ function unification(term_pairs: Array<[Term, Term]>, sub: Substitution) {
             sub.set(pair[1], pair[0])
             return unification(term_pairs.slice(1), sub)
         } else
-            return undefined
+            return false
     }
     else if (pair[0] instanceof Var) {
         let v: Term | undefined = sub.get(pair[0])
         if (v != undefined) {
             assert(v.equals(pair[1]),
-                "Failed: " + pair[0].repr() + " has multiple substitutions: " + pair[1].repr() + ", " + v.repr())
+                "Failed: " + pair[0].repr() + " has multiple substitutions: "
+                + pair[1].repr() + ", " + v.repr())
 
             return unification(term_pairs.slice(1), sub)
         } else {
@@ -176,23 +183,29 @@ function unification(term_pairs: Array<[Term, Term]>, sub: Substitution) {
             return unification(term_pairs.slice(1), sub)
         }
     }
-    return undefined
+    return false
 }
 
 function unify(t1: Term, t2: Term) {
     console.log("\nUnification: " + t1.repr() + " & " + t2.repr())
 
     let sub: Substitution = new Map<Var, Term>()
-    let res: Substitution | undefined = unification([[t1.copy(), t2.copy()]], sub)
-    if (res == undefined)
-        console.log("- Failed")
+    let res: boolean = unification([[t1.copy(), t2.copy()]], sub)
+    if (res == false) {
+        console.log("- The 2 terms can't be unified")
+        return false
+    }
     else {
-        merge(sub)
+        merge_substitution(sub)
         let sub_str: string = ""
         sub.forEach((v: Term, k: Var) => {
             sub_str += k.repr() + " -> " + v.repr() + ", "
         })
         console.log("{ " + sub_str + "}")
+
+        let sub_check: boolean = substitute(t1, sub).equals(substitute(t2, sub))
+        assert(sub_check, "Result of unification's substitution is not equal")
+        return true
     }
 }
 

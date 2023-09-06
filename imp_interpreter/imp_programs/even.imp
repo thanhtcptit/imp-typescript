@@ -8,13 +8,11 @@ func check(x) {
     else
         r := 0
     end;
-
     return r
 };
 
 func main() {
     x := 11;
     r := check(x);
-
     return 0
 }

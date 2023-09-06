@@ -6,7 +6,6 @@ func main() {
     if c
         d := !c
     end;
-
     return 0
 }
 

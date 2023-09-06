@@ -10,6 +10,5 @@ func main() {
         sum := add(sum, n);
         n := n - 1
     end;
-
     return 0
 }
