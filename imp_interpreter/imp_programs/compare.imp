@@ -1,0 +1,10 @@
+func compare(x, y) {
+    return x == y
+};
+
+func main() {
+    r1 := compare(1, 2);
+    r2 := compare(true, true);
+
+    return 0
+}

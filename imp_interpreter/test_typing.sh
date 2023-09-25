@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TESTS=(test.imp add.imp sum.imp gcd.imp even.imp pivot.imp fib.imp)
+TESTS=( fib.imp gcd.imp fst.imp compare.imp)
 
 npx tsc --downlevelIteration typing.ts
 

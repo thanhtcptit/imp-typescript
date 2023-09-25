@@ -1,0 +1,10 @@
+func fst(x, y) {
+    return x
+};
+
+func main() {
+    f1 := fst(0, 1);
+    f2 := fst(true, 1);
+
+    return 0
+}

@@ -8,7 +8,6 @@ func fib(n) {
 };
 
 func main() {
-    n := 9;
-    n := fib(n);
+    n := fib(9);
     return 0
 }

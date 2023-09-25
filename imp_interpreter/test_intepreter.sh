@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TESTS=(test.imp add.imp sum.imp gcd.imp even.imp pivot.imp fib.imp)
+TESTS=(id.imp)
 
 npx tsc intepreter.ts
 

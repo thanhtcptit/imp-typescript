@@ -156,7 +156,7 @@ export class HMIntegerExpression extends HMExpression {
     }
 
     public toString() {
-        return +this.val
+        return this.val.toString()
     }
 
     public equals(other: HMExpression) {
@@ -173,7 +173,7 @@ export class HMBooleanExpression extends HMExpression {
     }
 
     public toString() {
-        return +this.val
+        return this.val.toString()
     }
 
     public equals(other: HMExpression) {
@@ -211,7 +211,7 @@ export class HMAbstractionExpression extends HMExpression {
     }
 
     public toString() {
-        return "\\" + this.x.toString() + ". " + this.exp.toString()
+        return "|_" + this.x.toString() + " " + this.exp.toString()
     }
 
     public equals(other: HMExpression) {
@@ -361,28 +361,6 @@ function translateFunction(func_name: string, func_def: FunctionDefExpression, a
     )
 }
 
-function translate(file: string) {
-    let intepreter: Interpreter = new Interpreter()
-    intepreter.parseProgram(file)
-
-    let func_def: FunctionDefExpression = intepreter.getFunctionDef("main")
-    if (func_def.body == null)
-        return null
-
-    let program_hm_exp: HMExpression = translateStatement(func_def.body, "main")
-    for (let func of intepreter.getFunctionNames()) {
-        if (func == "main")
-            continue
-        program_hm_exp = new HMLetExpression(
-            new HMVariableExpression(func, "main"),
-            translateFunction(func, intepreter.getFunctionDef(func), 0),
-            program_hm_exp
-        )
-    }
-    // console.dir(program_hm_exp, {depth: null})
-    return program_hm_exp
-}
-
 type Constraint = [TypeTerm, TypeTerm]
 type Substitution = Map<TypeVariable, TypeTerm>
 
@@ -390,12 +368,11 @@ class TypeEnviroment {
     context: Map<string, TypeTerm>
     constraints: Array<Constraint>
     exp_type_map: Array<[HMExpression, TypeTerm]>
+    func_type_map: Map<string, TypeTerm>
     type_var_list: Array<TypeVariable>
 
     constructor() {
-        this.constraints = new Array<Constraint>()
-        this.type_var_list = new Array<TypeVariable>()
-        this.exp_type_map = Array<[HMExpression, TypeTerm]>()
+        this.func_type_map = new Map<string, TypeTerm>()
         this.context = new Map(
             [
                 ["+", new TypeArrow(new TypeConstructor("Int"), new TypeArrow(
@@ -409,10 +386,6 @@ class TypeEnviroment {
                 ["<", new TypeArrow(new TypeConstructor("Int"), new TypeArrow(
                     new TypeConstructor("Int"), new TypeConstructor("Bool")))],
                 ["<=", new TypeArrow(new TypeConstructor("Int"), new TypeArrow(
-                    new TypeConstructor("Int"), new TypeConstructor("Bool")))],
-                ["==", new TypeArrow(new TypeConstructor("Int"), new TypeArrow(
-                    new TypeConstructor("Int"), new TypeConstructor("Bool")))],
-                ["!=", new TypeArrow(new TypeConstructor("Int"), new TypeArrow(
                     new TypeConstructor("Int"), new TypeConstructor("Bool")))],
                 ["&&", new TypeArrow(new TypeConstructor("Bool"), new TypeArrow(
                     new TypeConstructor("Bool"), new TypeConstructor("Bool")))],
@@ -430,6 +403,12 @@ class TypeEnviroment {
         )
     }
 
+    public initUnificationEnvironment() {
+        this.constraints = new Array<Constraint>()
+        this.type_var_list = new Array<TypeVariable>()
+        this.exp_type_map = Array<[HMExpression, TypeTerm]>()
+    }
+
     public getType(v: HMExpression) {
         if (v instanceof HMIntegerExpression)
             return new TypeConstructor("Int")
@@ -443,6 +422,16 @@ class TypeEnviroment {
                 return new TypeArrow(tvar, new TypeArrow(tvar, new TypeConstructor("Unit")))
             }
 
+            if (v.name == "==") {
+                return new TypeArrow(this.createFreshTypeVariable(), new TypeArrow(
+                    this.createFreshTypeVariable(), new TypeConstructor("Bool")))
+            }
+
+            if (v.name == "!=") {
+                return new TypeArrow(this.createFreshTypeVariable(), new TypeArrow(
+                    this.createFreshTypeVariable(), new TypeConstructor("Bool")))
+            }
+
             if (v.name == ";") {
                 let tvar: TypeVariable = this.createFreshTypeVariable()
                 return new TypeArrow(new TypeConstructor("Unit"), new TypeArrow(tvar, tvar))
@@ -452,17 +441,63 @@ class TypeEnviroment {
                 let tvar: TypeVariable = this.createFreshTypeVariable()
                 return new TypeArrow(tvar, tvar)
             }
-            let r = this.context.get(v.name)
-            if (r != null)
-                return r
+            let t = this.context.get(v.name)
+            if (t != null)
+                return t
+            
+            t = this.func_type_map.get(v.name)
+            if (t != null) {
+                return this.createFreshType(t)
+            }
 
             for (let ele of this.exp_type_map)
                 if (ele[0].equals(v))
                     return ele[1]
 
-            return r
+            return t
         }
         assert(false, JSON.stringify(v))
+    }
+
+    public createFreshType(t: TypeTerm) {
+        if (t instanceof TypeVariable)
+            return this.createFreshTypeVariable()
+
+        let var_name_list: Array<string> = new Array<string>()
+        let ft_list: Array<TypeVariable> = new Array<TypeVariable>()
+        let arrow_list: Array<TypeVariable> = new Array<TypeVariable>()
+        while (true) {
+            let tmp: TypeTerm
+            if (t instanceof TypeArrow)
+                tmp = t.left
+            else
+                tmp = t
+
+            let i = var_name_list.indexOf(tmp.toString())
+            if (i > -1) {
+                arrow_list.push(ft_list[i])
+            } else {
+                let tvar: TypeTerm
+                if (tmp instanceof TypeConstructor)
+                    tvar = tmp.copy()
+                else
+                    tvar = this.createFreshTypeVariable()
+                ft_list.push(tvar)
+                arrow_list.push(tvar)
+
+                if (t instanceof TypeArrow)
+                    var_name_list.push(t.left.name)
+            }
+            if (t instanceof TypeArrow)
+                t = t.right
+            else
+                break
+        }
+        let ft: TypeTerm = arrow_list[arrow_list.length - 1];
+        for (let i = arrow_list.length - 2; i >= 0; i--) {
+            ft = new TypeArrow(arrow_list[i], ft)
+        }
+        return ft
     }
 
     public createFreshTypeVariable() {
@@ -484,23 +519,27 @@ class TypeEnviroment {
     public addTypeConstraint(v: TypeVariable, tt: TypeTerm) {
         this.constraints.push([v, tt])
     }
+
+    public addFunctionType(func_name: string, t: TypeTerm) {
+        this.func_type_map.set(func_name, t)
+    }
 }
 
-function inferType(exp: HMExpression, type_env: TypeEnviroment) {
+function generateTypeConstraints(exp: HMExpression, type_env: TypeEnviroment) {
     let exp_type_var: TypeVariable = type_env.createFreshTypeVariable()
 
     if (exp instanceof HMAbstractionExpression) {
-        let x_type_var: TypeVariable = inferType(exp.x, type_env)
-        let e_type_var: TypeVariable = inferType(exp.exp, type_env)
+        let x_type_var: TypeVariable = generateTypeConstraints(exp.x, type_env)
+        let e_type_var: TypeVariable = generateTypeConstraints(exp.exp, type_env)
         type_env.addTypeConstraint(exp_type_var, new TypeArrow(x_type_var, e_type_var))
     } else if (exp instanceof HMApplicationExpression) {
-        let e1_type_var: TypeVariable = inferType(exp.exp1, type_env)
-        let e2_type_var: TypeVariable = inferType(exp.exp2, type_env)
+        let e1_type_var: TypeVariable = generateTypeConstraints(exp.exp1, type_env)
+        let e2_type_var: TypeVariable = generateTypeConstraints(exp.exp2, type_env)
         type_env.addTypeConstraint(e1_type_var, new TypeArrow(e2_type_var, exp_type_var))
     } else if (exp instanceof HMLetExpression) {
-        let e1_type_var: TypeVariable = inferType(exp.exp1, type_env)
+        let e1_type_var: TypeVariable = generateTypeConstraints(exp.exp1, type_env)
         type_env.addExpressionTypeVariablePair(exp.x, e1_type_var)
-        let e2_type_var: TypeVariable = inferType(exp.exp2, type_env)
+        let e2_type_var: TypeVariable = generateTypeConstraints(exp.exp2, type_env)
         type_env.addTypeConstraint(exp_type_var, e2_type_var)
     } else {
         let tvar = type_env.getType(exp)
@@ -513,7 +552,7 @@ function inferType(exp: HMExpression, type_env: TypeEnviroment) {
     return exp_type_var
 }
 
-function merge_substitution(sub: Substitution) {
+function mergeSubstitution(sub: Substitution) {
     let sub_vars: Array<TypeVariable> = Array.from(sub.keys())
     for (let v of sub.keys()) {
         for (let v1 of sub_vars) {
@@ -609,47 +648,101 @@ function unification(cons: Array<Constraint>, sub: Substitution) {
     return false
 }
 
-function unify(cons: Array<Constraint>) {
-    let sub: Substitution = new Map<TypeVariable, TypeTerm>()
-    let res: boolean = unification(cons, sub)
+function inferExpType(exp: HMExpression, type_env: TypeEnviroment) {
+    type_env.initUnificationEnvironment()
+    generateTypeConstraints(exp, type_env)
 
-    merge_substitution(sub)
-    sub.forEach((v: TypeTerm, k: TypeVariable) => {
-        console.log(k.toString() + " => " + v.toString())
-    })
-    for (let con of cons) {
+    let sorted_arr = type_env.exp_type_map.sort((a, b) => {
+        if (!a[1].name.startsWith("a")) return -1e3
+        if (!b[1].name.startsWith("a")) return 1e3
+
+        return +b[1].name.split("a")[1] - +a[1].name.split("a")[1]
+    }) 
+
+    console.log("\nType inference for expression: " + exp.toString())
+    for (let ele of sorted_arr) {
+        let c_list = new Array<TypeTerm>()
+        for (let c of type_env.constraints) {
+            if (c[0].equals(ele[1]))
+                c_list.push(c[1].toString())
+        }
+        console.dir({"exp": ele[0].toString(), "tvar": ele[1].toString(), "c": c_list}, {depth: null})
+        console.log("------------------------------------------------------------------")
+    }
+
+    let sub: Substitution = new Map<TypeVariable, TypeTerm>()
+    let res: boolean = unification(type_env.constraints, sub)
+
+    mergeSubstitution(sub)
+    // sub.forEach((v: TypeTerm, k: TypeVariable) => {
+    //     console.log(k.toString() + " -> " + v.toString())
+    // })
+    let check_map = new Map<string, TypeTerm>()
+    for (let pair of type_env.exp_type_map) {
+        if (pair[0] instanceof HMIntegerExpression || pair[0] instanceof HMBooleanExpression ||
+                (pair[0] instanceof HMVariableExpression && type_env.func_type_map.get(pair[0].name) != undefined))
+            continue
+
+        let exp_str: string = pair[0].toString()
+        if ((!/^[a-z]/i.test(exp_str) && !exp_str.startsWith("|_")) ||
+                exp_str.startsWith("return") || exp_str.startsWith("if"))
+            continue
+        let exp_type: TypeTerm | undefined = sub.get(pair[1])
+        if (exp_type == undefined)
+            exp_type = pair[1]
+
+        if (check_map.has(exp_str)) {
+            // assert(exp_type.equals(sub.get(check_map.get(exp_str))),
+            //       "Unification error: " + exp_str + " -> " + sub.get(check_map.get(exp_str)) +
+            //             " | " + sub.get(pair[1]))
+            continue
+        }
+
+        console.log(exp_str + " -> " + exp_type)
+        check_map.set(exp_str, pair[1])
+    }
+
+    for (let con of type_env.constraints) {
         let sub_check: boolean = substitute(con[0], sub).equals(substitute(con[1], sub))
         assert(sub_check, "Result of unification is not valid")
     }
+    return sub
 }
 
-function inferProgram(file: string, type_env: TypeEnviroment) {
-    let main_exp: HMExpression | null = translate(file)
-    if (main_exp == null)
+function inferProgramType(file: string, type_env: TypeEnviroment) {
+    let intepreter: Interpreter = new Interpreter()
+    intepreter.parseProgram(file)
+
+    for (let func of intepreter.getFunctionNames()) {
+        if (func == "main")
+            continue
+
+        let func_hm_exp: HMExpression = translateFunction(
+            func, intepreter.getFunctionDef(func), 0)
+        let sub: Substitution = inferExpType(func_hm_exp, type_env)
+
+        let func_type: TypeTerm | undefined;
+        for (let pair of type_env.exp_type_map) {
+            if (pair[0].equals(func_hm_exp)) {
+                func_type = sub.get(pair[1])
+                break
+            }
+        }
+        if (func_type == undefined) assert(false, func_hm_exp.toString())
+        type_env.addFunctionType(func, func_type)
+    }
+
+    let main_func_def = intepreter.getFunctionDef("main")
+    let program_hm_exp: HMExpression = translateStatement(
+        main_func_def.body, "main")
+    // console.dir(program_hm_exp, {depth: null})
+    if (program_hm_exp == null)
         return -1
 
-    inferType(main_exp, type_env)
-
-    // let sorted_arr = type_env.exp_type_map.sort((a, b) => {
-    //     if (!a[1].name.startsWith("a")) return -1e3
-    //     if (!b[1].name.startsWith("a")) return 1e3
-
-    //     return +b[1].name.split("a")[1] - +a[1].name.split("a")[1]
-    // }) 
-    // for (let ele of sorted_arr) {
-    //     let c_list = new Array<TypeTerm>()
-    //     for (let c of type_env.constraints) {
-    //         if (c[0].equals(ele[1]))
-    //             c_list.push(c[1].toString())
-    //     }
-    //     console.dir({"exp": ele[0].toString(), "tvar": ele[1].toString(), "c": c_list}, {depth: null})
-    //     console.log("-------------------------------------------------------")
-    // }
-
-    unify(type_env.constraints)
+    inferExpType(program_hm_exp, type_env)
 }
 
 var args = process.argv
 
 var file: string = args[2]
-inferProgram(file, new TypeEnviroment())
+inferProgramType(file, new TypeEnviroment())
